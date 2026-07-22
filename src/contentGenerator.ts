@@ -104,7 +104,10 @@ function buildNewsletterContent(analysis: AnalysisResult): GeneratedContent {
   };
 }
 
-function generateForChannel(channel: GeneratedChannel, analysis: AnalysisResult) {
+function generateForChannel(
+  channel: GeneratedChannel,
+  analysis: AnalysisResult
+): GeneratedContent {
   switch (channel) {
     case 'Website':
       return buildWebsiteContent(analysis);
@@ -116,6 +119,10 @@ function generateForChannel(channel: GeneratedChannel, analysis: AnalysisResult)
       return buildFacebookContent(analysis);
     case 'Newsletter':
       return buildNewsletterContent(analysis);
+    default: {
+      const exhaustiveCheck: never = channel;
+      throw new Error(`Unsupported channel: ${exhaustiveCheck}`);
+    }
   }
 }
 
@@ -127,7 +134,9 @@ export function generateContentPackage(
     .map(normalizeChannel)
     .filter((channel): channel is GeneratedChannel => channel !== null);
 
-  const channels = Array.from(new Set<GeneratedChannel>(['Website', ...selectedChannels]));
+  const channels = Array.from(
+    new Set<GeneratedChannel>(['Website', ...selectedChannels])
+  );
 
   return {
     summary: firstOrFallback(
