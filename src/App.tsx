@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  ArrowLeft,
   ArrowRight,
   Check,
   ClipboardCheck,
@@ -10,6 +11,7 @@ import {
   PackageCheck,
   RotateCcw,
 } from 'lucide-react';
+import { analyzeContent } from './analysis';
 
 const STORAGE_KEY = 'kpc-content-strategist-source';
 
@@ -27,11 +29,26 @@ function countWords(value: string) {
   return trimmedValue ? trimmedValue.split(/\s+/).length : 0;
 }
 
+function ResultList({ items, emptyMessage }: { items: string[]; emptyMessage: string }) {
+  if (items.length === 0) {
+    return <p>{emptyMessage}</p>;
+  }
+
+  return (
+    <ul>
+      {items.map((item) => (
+        <li key={item}>{item}</li>
+      ))}
+    </ul>
+  );
+}
+
 function App() {
   const [sourceText, setSourceText] = useState(() => localStorage.getItem(STORAGE_KEY) ?? '');
   const [activeStep, setActiveStep] = useState(0);
 
   const wordCount = useMemo(() => countWords(sourceText), [sourceText]);
+  const analysis = useMemo(() => analyzeContent(sourceText), [sourceText]);
   const hasSource = sourceText.trim().length > 0;
 
   useEffect(() => {
@@ -110,7 +127,7 @@ function App() {
         </nav>
 
         <section className="workspace" aria-live="polite">
-          {activeStep === 0 ? (
+          {activeStep === 0 && (
             <div className="source-layout">
               <article className="workspace-card source-card">
                 <div className="card-heading">
@@ -167,15 +184,65 @@ function App() {
                 </div>
               </aside>
             </div>
-          ) : (
+          )}
+
+          {activeStep === 1 && (
+            <article className="workspace-card analysis-card">
+              <div className="card-heading">
+                <div>
+                  <p className="eyebrow">Step 2 of 6</p>
+                  <h2>Communication analysis</h2>
+                  <p>Review the strategist's interpretation before developing the communication plan.</p>
+                </div>
+              </div>
+
+              <div className="analysis-grid">
+                <section>
+                  <h3>Likely audiences</h3>
+                  <ResultList items={analysis.audience} emptyMessage="No audience identified." />
+                </section>
+                <section>
+                  <h3>Communication objectives</h3>
+                  <ResultList items={analysis.objectives} emptyMessage="No objective identified." />
+                </section>
+                <section>
+                  <h3>Key messages</h3>
+                  <ResultList items={analysis.keyMessages} emptyMessage="No key messages identified." />
+                </section>
+                <section>
+                  <h3>Potential risks</h3>
+                  <ResultList items={analysis.risks} emptyMessage="No risks identified." />
+                </section>
+                <section>
+                  <h3>Recommended channels</h3>
+                  <ResultList items={analysis.suggestedChannels} emptyMessage="No channels identified." />
+                </section>
+                <section>
+                  <h3>Missing information</h3>
+                  <ResultList items={analysis.missingInformation} emptyMessage="No essential gaps detected." />
+                </section>
+              </div>
+
+              <div className="card-actions">
+                <button className="button secondary" type="button" onClick={() => setActiveStep(0)}>
+                  <ArrowLeft aria-hidden="true" size={18} />
+                  Edit Source
+                </button>
+                <button className="button primary" type="button" disabled>
+                  Continue to Plan
+                  <ArrowRight aria-hidden="true" size={18} />
+                </button>
+              </div>
+            </article>
+          )}
+
+          {activeStep > 1 && (
             <article className="workspace-card placeholder-card">
               <p className="eyebrow">Step {activeStep + 1} of 6</p>
               <h2>{workflowSteps[activeStep].title}</h2>
-              <p>
-                The Source step is complete. This workspace is reserved for the next functional slice of the application.
-              </p>
-              <button className="button secondary" type="button" onClick={() => setActiveStep(0)}>
-                Return to Source
+              <p>This workspace is reserved for the next functional slice of the application.</p>
+              <button className="button secondary" type="button" onClick={() => setActiveStep(1)}>
+                Return to Analysis
               </button>
             </article>
           )}
