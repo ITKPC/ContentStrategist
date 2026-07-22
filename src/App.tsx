@@ -4,6 +4,7 @@ import {
   ArrowRight,
   Check,
   ClipboardCheck,
+  Copy,
   FileText,
   Layers3,
   Lightbulb,
@@ -12,16 +13,23 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { analyzeContent } from './analysis';
+import { buildCommunicationPlan } from './planning';
+import { generateContentPackage } from './contentGenerator';
+import { reviewCommunicationPackage } from './review';
+import {
+  buildCommunicationsPackage,
+  packageToPlainText,
+} from './packageBuilder';
 
 const STORAGE_KEY = 'kpc-content-strategist-source';
 
 const workflowSteps = [
   { title: 'Source', description: 'Add the information you need to communicate.', icon: FileText },
   { title: 'Analysis', description: 'Understand audiences, objectives, risks, and gaps.', icon: Lightbulb },
-  { title: 'Plan', description: 'Choose channels, timing, sequence, and priorities.', icon: Layers3 },
+  { title: 'Plan', description: 'Review channels, timing, sequence, and priorities.', icon: Layers3 },
   { title: 'Create', description: 'Develop distinct content for each selected channel.', icon: Megaphone },
   { title: 'Before You Publish', description: 'Complete a practical readiness check.', icon: ClipboardCheck },
-  { title: 'Communications Package', description: 'Review the complete coordinated package.', icon: PackageCheck },
+  { title: 'Communications Package', description: 'Review and copy the coordinated package.', icon: PackageCheck },
 ];
 
 function countWords(value: string) {
@@ -30,9 +38,7 @@ function countWords(value: string) {
 }
 
 function ResultList({ items, emptyMessage }: { items: string[]; emptyMessage: string }) {
-  if (items.length === 0) {
-    return <p>{emptyMessage}</p>;
-  }
+  if (items.length === 0) return <p>{emptyMessage}</p>;
 
   return (
     <ul>
@@ -44,11 +50,28 @@ function ResultList({ items, emptyMessage }: { items: string[]; emptyMessage: st
 }
 
 function App() {
-  const [sourceText, setSourceText] = useState(() => localStorage.getItem(STORAGE_KEY) ?? '');
+  const [sourceText, setSourceText] = useState(
+    () => localStorage.getItem(STORAGE_KEY) ?? ''
+  );
   const [activeStep, setActiveStep] = useState(0);
+  const [copyMessage, setCopyMessage] = useState('');
 
   const wordCount = useMemo(() => countWords(sourceText), [sourceText]);
   const analysis = useMemo(() => analyzeContent(sourceText), [sourceText]);
+  const plan = useMemo(() => buildCommunicationPlan(analysis), [analysis]);
+  const generatedContent = useMemo(
+    () => generateContentPackage(analysis, plan),
+    [analysis, plan]
+  );
+  const review = useMemo(
+    () => reviewCommunicationPackage(analysis, plan, generatedContent),
+    [analysis, generatedContent, plan]
+  );
+  const communicationsPackage = useMemo(
+    () =>
+      buildCommunicationsPackage(analysis, plan, generatedContent, review),
+    [analysis, generatedContent, plan, review]
+  );
   const hasSource = sourceText.trim().length > 0;
 
   useEffect(() => {
@@ -58,12 +81,24 @@ function App() {
   function clearSource() {
     setSourceText('');
     setActiveStep(0);
+    setCopyMessage('');
     localStorage.removeItem(STORAGE_KEY);
   }
 
-  function continueToAnalysis() {
-    if (hasSource) {
-      setActiveStep(1);
+  function goToStep(step: number) {
+    if (hasSource && step >= 0 && step < workflowSteps.length) {
+      setActiveStep(step);
+    }
+  }
+
+  async function copyPackage() {
+    try {
+      await navigator.clipboard.writeText(
+        packageToPlainText(communicationsPackage)
+      );
+      setCopyMessage('Complete package copied.');
+    } catch {
+      setCopyMessage('The package could not be copied automatically.');
     }
   }
 
@@ -77,7 +112,7 @@ function App() {
             <small>Helping KPC communicate with confidence.</small>
           </span>
         </a>
-        <span className="product-status">Sprint 1</span>
+        <span className="product-status">Working prototype</span>
       </header>
 
       <main id="top">
@@ -87,7 +122,7 @@ function App() {
             <h1 id="page-title">Turn source information into a coordinated communications package.</h1>
             <p className="hero-copy">
               Begin with meeting minutes, an email, event notes, an announcement, or a policy update.
-              The workspace will guide the Communications Team through planning, creation, review, and packaging.
+              The workspace guides the Communications Team through planning, creation, review, and packaging.
             </p>
           </div>
           <div className="hero-principle">
@@ -102,7 +137,7 @@ function App() {
               const Icon = step.icon;
               const isActive = index === activeStep;
               const isComplete = index < activeStep;
-              const isAvailable = index === 0 || (hasSource && index <= activeStep);
+              const isAvailable = index === 0 || hasSource;
 
               return (
                 <li key={step.title}>
@@ -160,7 +195,7 @@ function App() {
                     <RotateCcw aria-hidden="true" size={18} />
                     Clear
                   </button>
-                  <button className="button primary" type="button" onClick={continueToAnalysis} disabled={!hasSource}>
+                  <button className="button primary" type="button" onClick={() => goToStep(1)} disabled={!hasSource}>
                     Continue to Analysis
                     <ArrowRight aria-hidden="true" size={18} />
                   </button>
@@ -178,10 +213,6 @@ function App() {
                   <li>Links that must be included</li>
                   <li>Anything sensitive or uncertain</li>
                 </ul>
-                <div className="guidance-callout">
-                  <strong>Questions will be limited.</strong>
-                  <span>Only essential missing information should interrupt the workflow.</span>
-                </div>
               </aside>
             </div>
           )}
@@ -192,58 +223,96 @@ function App() {
                 <div>
                   <p className="eyebrow">Step 2 of 6</p>
                   <h2>Communication analysis</h2>
-                  <p>Review the strategist's interpretation before developing the communication plan.</p>
+                  <p>Review the strategist's interpretation before developing the plan.</p>
                 </div>
               </div>
-
               <div className="analysis-grid">
-                <section>
-                  <h3>Likely audiences</h3>
-                  <ResultList items={analysis.audience} emptyMessage="No audience identified." />
-                </section>
-                <section>
-                  <h3>Communication objectives</h3>
-                  <ResultList items={analysis.objectives} emptyMessage="No objective identified." />
-                </section>
-                <section>
-                  <h3>Key messages</h3>
-                  <ResultList items={analysis.keyMessages} emptyMessage="No key messages identified." />
-                </section>
-                <section>
-                  <h3>Potential risks</h3>
-                  <ResultList items={analysis.risks} emptyMessage="No risks identified." />
-                </section>
-                <section>
-                  <h3>Recommended channels</h3>
-                  <ResultList items={analysis.suggestedChannels} emptyMessage="No channels identified." />
-                </section>
-                <section>
-                  <h3>Missing information</h3>
-                  <ResultList items={analysis.missingInformation} emptyMessage="No essential gaps detected." />
-                </section>
+                <section><h3>Likely audiences</h3><ResultList items={analysis.audience} emptyMessage="No audience identified." /></section>
+                <section><h3>Communication objectives</h3><ResultList items={analysis.objectives} emptyMessage="No objective identified." /></section>
+                <section><h3>Key messages</h3><ResultList items={analysis.keyMessages} emptyMessage="No key messages identified." /></section>
+                <section><h3>Potential risks</h3><ResultList items={analysis.risks} emptyMessage="No risks identified." /></section>
+                <section><h3>Recommended channels</h3><ResultList items={analysis.suggestedChannels} emptyMessage="No channels identified." /></section>
+                <section><h3>Missing information</h3><ResultList items={analysis.missingInformation} emptyMessage="No essential gaps detected." /></section>
               </div>
-
               <div className="card-actions">
-                <button className="button secondary" type="button" onClick={() => setActiveStep(0)}>
-                  <ArrowLeft aria-hidden="true" size={18} />
-                  Edit Source
-                </button>
-                <button className="button primary" type="button" disabled>
-                  Continue to Plan
-                  <ArrowRight aria-hidden="true" size={18} />
-                </button>
+                <button className="button secondary" type="button" onClick={() => goToStep(0)}><ArrowLeft size={18} />Edit Source</button>
+                <button className="button primary" type="button" onClick={() => goToStep(2)}>Continue to Plan<ArrowRight size={18} /></button>
               </div>
             </article>
           )}
 
-          {activeStep > 1 && (
-            <article className="workspace-card placeholder-card">
-              <p className="eyebrow">Step {activeStep + 1} of 6</p>
-              <h2>{workflowSteps[activeStep].title}</h2>
-              <p>This workspace is reserved for the next functional slice of the application.</p>
-              <button className="button secondary" type="button" onClick={() => setActiveStep(1)}>
-                Return to Analysis
-              </button>
+          {activeStep === 2 && (
+            <article className="workspace-card analysis-card">
+              <p className="eyebrow">Step 3 of 6</p>
+              <h2>Communication plan</h2>
+              <div className="analysis-grid">
+                <section><h3>Publication order</h3><ResultList items={plan.publicationOrder} emptyMessage="No sequence available." /></section>
+                <section><h3>Recommended channels</h3><ResultList items={plan.recommendedChannels} emptyMessage="No channels selected." /></section>
+                <section><h3>Review required</h3><ResultList items={plan.reviewRequired} emptyMessage="No additional review identified." /></section>
+                <section><h3>Timing guidance</h3><ResultList items={plan.timing} emptyMessage="No timing guidance available." /></section>
+              </div>
+              <div className="card-actions">
+                <button className="button secondary" type="button" onClick={() => goToStep(1)}><ArrowLeft size={18} />Back</button>
+                <button className="button primary" type="button" onClick={() => goToStep(3)}>Create Content<ArrowRight size={18} /></button>
+              </div>
+            </article>
+          )}
+
+          {activeStep === 3 && (
+            <article className="workspace-card analysis-card">
+              <p className="eyebrow">Step 4 of 6</p>
+              <h2>Channel content</h2>
+              <div className="analysis-grid">
+                {generatedContent.items.map((item) => (
+                  <section key={item.channel}>
+                    <h3>{item.channel}: {item.title}</h3>
+                    <p><strong>Purpose:</strong> {item.purpose}</p>
+                    <pre>{item.body}</pre>
+                  </section>
+                ))}
+              </div>
+              <div className="card-actions">
+                <button className="button secondary" type="button" onClick={() => goToStep(2)}><ArrowLeft size={18} />Back</button>
+                <button className="button primary" type="button" onClick={() => goToStep(4)}>Review Before Publishing<ArrowRight size={18} /></button>
+              </div>
+            </article>
+          )}
+
+          {activeStep === 4 && (
+            <article className="workspace-card analysis-card">
+              <p className="eyebrow">Step 5 of 6</p>
+              <h2>Before You Publish</h2>
+              <p><strong>Status:</strong> {review.status.replace('_', ' ')}</p>
+              <p><strong>Readiness score:</strong> {review.readinessScore}/100</p>
+              <div className="analysis-grid">
+                <section><h3>Blocking issues</h3><ResultList items={review.blockingIssues.map((item) => `${item.message} ${item.recommendation}`)} emptyMessage="No blocking issues." /></section>
+                <section><h3>Warnings</h3><ResultList items={review.warnings.map((item) => `${item.message} ${item.recommendation}`)} emptyMessage="No warnings." /></section>
+                <section><h3>Completed checks</h3><ResultList items={review.completedChecks} emptyMessage="No completed checks." /></section>
+                <section><h3>Recommended actions</h3><ResultList items={review.recommendedActions} emptyMessage="No additional actions." /></section>
+              </div>
+              <div className="card-actions">
+                <button className="button secondary" type="button" onClick={() => goToStep(3)}><ArrowLeft size={18} />Back</button>
+                <button className="button primary" type="button" onClick={() => goToStep(5)}>Build Package<ArrowRight size={18} /></button>
+              </div>
+            </article>
+          )}
+
+          {activeStep === 5 && (
+            <article className="workspace-card analysis-card">
+              <p className="eyebrow">Step 6 of 6</p>
+              <h2>{communicationsPackage.title}</h2>
+              <p>{communicationsPackage.summary}</p>
+              <div className="analysis-grid">
+                <section><h3>Audience</h3><ResultList items={communicationsPackage.audience} emptyMessage="No audience listed." /></section>
+                <section><h3>Key messages</h3><ResultList items={communicationsPackage.keyMessages} emptyMessage="No key messages listed." /></section>
+                <section><h3>Publication checklist</h3><ResultList items={communicationsPackage.publicationChecklist} emptyMessage="No checklist items." /></section>
+                <section><h3>Package status</h3><p>{communicationsPackage.status.replace('_', ' ')}</p></section>
+              </div>
+              <div className="card-actions">
+                <button className="button secondary" type="button" onClick={() => goToStep(4)}><ArrowLeft size={18} />Back</button>
+                <button className="button primary" type="button" onClick={copyPackage}><Copy size={18} />Copy Complete Package</button>
+              </div>
+              {copyMessage && <p role="status">{copyMessage}</p>}
             </article>
           )}
         </section>
